@@ -7,7 +7,6 @@ import os
 import re
 import shutil
 from urlparse import urlparse, urlunparse, urljoin
-import unicodedata # XXX
 from lxml import html
 import requests
 
