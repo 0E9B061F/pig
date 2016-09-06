@@ -99,7 +99,10 @@ class ImageGrabber:
         if self.verbosity == 1:
             if self.sym_count_block >= self.sym_block:
                 self.sym_blocks += 1
-                self.put(" {}", self.downloads)
+                if self.downloads > 0:
+                    self.put(" {}", self.downloads)
+                else:
+                    print("")
                 self.sym_count_line = 0
                 self.sym_count_block = 0
             elif self.sym_count_line >= self.sym_width:
