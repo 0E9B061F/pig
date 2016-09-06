@@ -10,11 +10,26 @@ linked image. Downloaded images will be stored in a directory under the working
 directory, named after the given URL. PIG will avoid downloading the same URL
 twice, and will retry failed downloads.
 
-
 See `pig -h` for a full list of options.
 
 
-##### Simple usage
+### Shorthand Key
+
+PIG uses a set of shorthand symbols for its default output; see the table below
+for their meaning:
+
+Operation | Shorthand
+----------|----------
+Skip      | .
+Download  | +
+Discard   | -
+Redirect  | >
+Fail      | ?
+
+
+### Examples
+
+#### Simple usage
 
 Call the `pig` executable with a complete URL:
 
@@ -23,7 +38,7 @@ Call the `pig` executable with a complete URL:
 Images will be downloaded to `./pig-downloads/google-com`
 
 
-##### The PATH option
+#### The PATH option
 
 Specify the `-p PATH` option to change where the image directory will be
 created:
@@ -33,7 +48,7 @@ created:
 Images will be downloaded to `./images/logos/google-com`
 
 
-##### The NAME option
+#### The NAME option
 
 Specify the `-n NAME` option to change the image directory name:
 
@@ -42,7 +57,7 @@ Specify the `-n NAME` option to change the image directory name:
 Images will be downloaded to `./pig-downloads/google-logo`
 
 
-##### Discarding duplicates
+#### Discarding duplicates
 
 Specify the `-u` flag to discard duplicate images:
 
