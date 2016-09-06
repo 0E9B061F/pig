@@ -40,7 +40,7 @@ Fail      | ?
 
 Call the `pig` executable with a complete URL:
 
-    pig http://google.com
+    pig http://www.google.com
 
 Images will be downloaded to `./pig-downloads/google-com`
 
@@ -50,7 +50,7 @@ Images will be downloaded to `./pig-downloads/google-com`
 Specify the `-p PATH` option to change where the image directory will be
 created:
 
-    pig -p images/logos http://google.com
+    pig -p images/logos http://www.google.com
 
 Images will be downloaded to `./images/logos/google-com`
 
@@ -59,7 +59,7 @@ Images will be downloaded to `./images/logos/google-com`
 
 Specify the `-n NAME` option to change the image directory name:
 
-    pig -n google-logo http://google.com
+    pig -n google-logo http://www.google.com
 
 Images will be downloaded to `./pig-downloads/google-logo`
 
