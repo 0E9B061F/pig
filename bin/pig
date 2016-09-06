@@ -16,13 +16,10 @@ parser.add_argument("-v", "--verbose", help="Increase verbosity", action="count"
 parser.add_argument("-q", "--quiet", help="Decrease verbosity", action="count")
 args = parser.parse_args()
 
-if args.URL:
-    vp = args.verbose or 0
-    vm = args.quiet or 0
-    v = 1 + vp - vm
-    p = pig.new(args.URL, args.path, args.name, args.unique, v)
-    p.execute()
-    if args.stats:
-        p.print_stats()
-else:
-    raise
+vp = args.verbose or 0
+vm = args.quiet or 0
+v = 1 + vp - vm
+p = pig.new(args.URL, args.path, args.name, args.unique, v)
+p.execute()
+if args.stats:
+    p.print_stats()
