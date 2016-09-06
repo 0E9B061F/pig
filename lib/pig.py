@@ -8,6 +8,17 @@ import hashlib
 import sys
 import math
 
+
+image_extensions = ('.jpg', '.jpeg', '.gif', '.png', '.tiff')
+
+class symbols:
+    skip     = "."
+    download = "+"
+    discard  = "-"
+    redirect = ">"
+    fail     = "?"
+
+
 def new(*args):
     return ImageGrabber(*args)
 
@@ -26,8 +37,8 @@ def slugify(s):
     s = re.sub('[^\w\s-]', '', s).strip().lower()
     return re.sub('[-\s]+', '-', s)
 
+
 class ImageGrabber:
-    image_extensions = ('.jpg', '.jpeg', '.gif', '.png', '.tiff')
     failed = []
     downloaded = []
     retry_limit = 3
@@ -48,11 +59,6 @@ class ImageGrabber:
     sym_blocks = 0
     sym_width = 40
     sym_block = sym_width * 5
-    sym_download = "+"
-    sym_skip = "."
-    sym_fail = "?"
-    sym_discard = "-"
-    sym_redirect = ">"
 
     def __init__(self, target_url, imgdir_path=None, imgdir_name=None, unique=False, verbosity=1):
         self.target = target_url
@@ -121,9 +127,9 @@ class ImageGrabber:
         for url in addresses:
             self.msg("Processing `{}` . . .", url)
             url = urlparse(url)
-            if not url.path.endswith(self.image_extensions):
+            if not url.path.endswith(image_extensions):
                 self.sub("No image extension, skipping.")
-                self.sym(self.sym_skip)
+                self.sym(symbols.skip)
                 continue
             filename = os.path.basename(url.path)
             if not url.scheme:
@@ -145,7 +151,7 @@ class ImageGrabber:
                 self.download_address(url, filename)
             else:
                 self.sub("Already downloaded, skipping.")
-                self.sym(self.sym_skip)
+                self.sym(symbols.skip)
             self.processed += 1
             if retry:
                 self.retries += 1
@@ -157,7 +163,7 @@ class ImageGrabber:
             r = requests.head(r.headers['Location'])
             self.redirects += 1
             redirects += 1
-            self.sym(self.sym_redirect)
+            self.sym(symbols.redirect)
         if 'Location' in r.headers or not 'Content-Type' in r.headers:
             return False
         else:
@@ -188,19 +194,19 @@ class ImageGrabber:
                     if h in self.hashes:
                         os.remove(filename)
                         self.discarded += 1
-                        self.sym(self.sym_discard)
+                        self.sym(symbols.discard)
                     else:
                         self.hashes.append(h)
-                        self.sym(self.sym_download)
+                        self.sym(symbols.download)
                 else:
-                    self.sym(self.sym_download)
+                    self.sym(symbols.download)
             else:
                 self.sub("Failed getting `{}` with code {}", url, img.status_code)
-                self.sym(self.sym_fail)
+                self.sym(symbols.fail)
                 self.failed.append(url)
         else:
             self.sub("Not an image, skipping.")
-            self.sym(self.sym_skip)
+            self.sym(symbols.skip)
 
     def execute(self):
         self.start = time()
