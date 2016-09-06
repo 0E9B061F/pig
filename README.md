@@ -1,9 +1,10 @@
 **Python Image Grabber** (PIG) is a simple single-page image scraper.
 
-1. [Synopsis](#p1)
-2. [Shorthand Key](#p2)
-3. [Examples](#p3)
+1. [Synopsis](#synopsis)
+2. [Shorthand Key](#shorthand)
+3. [Examples](#examples)
 
+<div id="synopsis"></div>
 ## Synopsis
 
 `pig [-p PATH] [-n NAME] [-u] URL`
@@ -19,6 +20,7 @@ twice, and will retry failed downloads.
 See `pig -h` for a full list of options.
 
 
+<div id="shorthand"></div>
 ## Shorthand Key
 
 PIG uses a set of shorthand symbols for its default output; see the table below
@@ -33,6 +35,7 @@ Redirect  | >
 Fail      | ?
 
 
+<div id="examples"></div>
 ## Examples
 
 #### Simple usage
