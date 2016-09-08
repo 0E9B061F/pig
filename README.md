@@ -2,7 +2,8 @@
 
 1. [Synopsis](#synopsis)
 2. [Shorthand Key](#shorthand-key)
-3. [Examples](#examples)
+3. [Verbosity and Output](#verbosity-and-output)
+4. [Examples](#examples)
 
 
 ## Synopsis
@@ -32,6 +33,52 @@ Download  | +
 Discard   | -
 Redirect  | >
 Fail      | ?
+
+
+## Verbosity and output
+
+PIG has three levels of verbosity. The default verbosity level is 1. Verbosity
+is controlled by specifying the `-q` and `-v` flags.
+
+#### Verbosity 0
+
+At verbosity 0, PIG will run silently. The `-q` flag sets verbosity to 0.
+
+#### Verbosity 1
+
+Standard verbosity. Output is represented by a symbolic shorthand. Total
+downloads are given to the right of the shorthand output, and finally the total
+time is given with the final download count.
+
+Example:
+
+    ........................................
+    ........................................
+    ............+........................+..
+    .......+.........>+...+.................
+    .....+.......................+.......... 7
+    .............+......................+...
+    .......+......+......+....+.............
+    ............+....................+......
+    ....+...........+....+..................
+    ......+..........+.............+........ 21
+    .+...+.........>+.............+....+....
+    ...........+............................
+    ...........++++++++++++++++++++--+++++++
+    .-..+..                                  55 | 38s
+
+See the section [Shorthand Key](#shorthand-key) above for a guide to these
+symbols.
+
+#### Verbosity 2
+
+Full output, with multiple lines of information for every element
+processed, including full URLs and paths. The `-v` flag will raise verbosity to 2.
+
+#### Print statistics
+
+Run PIG with the `-s` flag to print a set of statistics before exiting,
+including data transferred and operation counts.
 
 
 ## Examples
