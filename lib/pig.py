@@ -19,8 +19,8 @@ class symbols:
     fail     = "?"
 
 
-def new(*args):
-    return ImageGrabber(*args)
+def new(*args, **kwargs):
+    return ImageGrabber(*args, **kwargs)
 
 def mkdirp(path):
     try:
@@ -59,14 +59,17 @@ class ImageGrabber:
     sym_blocks = 0
     sym_width = 40
     sym_block = sym_width * 5
+    logfile = None
 
-    def __init__(self, target_url, imgdir_path=None, imgdir_name=None, unique=False, verbosity=1):
+    def __init__(self, target_url, imgdir_path=None, imgdir_name=None, unique=False, verbosity=1, logfile_path=None, flush=False):
         self.target = target_url
         self.slug = slugify(self.target)
         self.imgdir_path = imgdir_path
         self.imgdir_name = imgdir_name
         self.unique = unique
         self.verbosity = verbosity
+        self.logfile_path = logfile_path
+        self.flush = flush
         if not self.imgdir_path:
             self.imgdir_path = os.path.join(os.getcwd(), 'pig-downloads')
         if not self.imgdir_name:
@@ -90,9 +93,22 @@ class ImageGrabber:
             t = "{}h{}m{}s".format(h,m,s)
         return t
 
+    def write(self, str="", raw=False, *args):
+        if not raw: str += "\n"
+        str = str.format(*args)
+        sys.stdout.write(str)
+        if self.flush: sys.stdout.flush()
+        if self.logfile:
+            self.logfile.write(str)
+            if self.flush:
+                self.logfile.flush()
+                os.fsync(self.logfile)
 
-    def put(self, s, *args):
-        print(s.format(*args))
+    def put(self, s="", *args):
+        self.write(s, False, *args)
+
+    def p(self, s, *args):
+        self.write(s, True, *args)
 
     def msg(self, s, *args):
         if self.verbosity > 1:
@@ -108,13 +124,13 @@ class ImageGrabber:
                 if self.downloads > 0:
                     self.put(" {}", self.downloads)
                 else:
-                    print("")
+                    self.put()
                 self.sym_count_line = 0
                 self.sym_count_block = 0
             elif self.sym_count_line >= self.sym_width:
-                print("")
+                self.put()
                 self.sym_count_line = 0
-            sys.stdout.write(c)
+            self.p(c)
             self.sym_count_line += 1
             self.sym_count_block += 1
 
@@ -210,6 +226,8 @@ class ImageGrabber:
 
     def execute(self):
         self.start = time()
+        if self.logfile_path:
+            self.logfile = open(self.logfile_path, 'w')
         page = requests.get(self.target)
         tree = html.fromstring(page.content)
         addresses = tree.xpath('//a/@href') + tree.xpath('//img/@src')
@@ -221,11 +239,14 @@ class ImageGrabber:
             self.failed = []
             self.download_addresses(last_failed, True)
         self.finalize_sym()
+        if self.logfile:
+            self.logfile.close()
+            self.logfile = None
         self.elapsed = time() - self.start
 
     def print_stats(self):
         if self.sym_count_line > 0:
-            print("")
+            self.put()
         self.put("Elapsed:    {}s | {}m", round(self.elapsed, 2), round(self.elapsed / 60, 2))
         self.put("Processed:  {} | {}/s", self.processed, round(self.processed / self.elapsed, 1))
         self.put("Downloaded: {} | {}/s", self.downloads, round(self.downloads / self.elapsed, 1))

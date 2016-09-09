@@ -14,12 +14,13 @@ parser.add_argument("-u", "--unique", help="Remove duplicate images", action="st
 parser.add_argument("-s", "--stats", help="Report statistics before PIG exits", action="store_true")
 parser.add_argument("-v", "--verbose", help="Increase verbosity", action="count")
 parser.add_argument("-q", "--quiet", help="Decrease verbosity", action="count")
+parser.add_argument("-l", "--log", help="Log output to the given file")
 args = parser.parse_args()
 
 vp = args.verbose or 0
 vm = args.quiet or 0
 v = 1 + vp - vm
-p = pig.new(args.URL, args.path, args.name, args.unique, v)
+p = pig.new(args.URL, args.path, args.name, args.unique, v, logfile_path=args.log)
 p.execute()
 if args.stats:
     p.print_stats()
