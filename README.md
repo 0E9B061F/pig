@@ -80,6 +80,10 @@ processed, including full URLs and paths. The `-v` flag will raise verbosity to 
 Run PIG with the `-s` flag to print a set of statistics before exiting,
 including data transferred and operation counts.
 
+### Writing output to a file
+
+Specify `-l FILENAME` to write output to the given file.
+
 
 ## Examples
 
