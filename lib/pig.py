@@ -1,17 +1,19 @@
+import sys
 import os
+import math
 import re
+from time import time
 from urlparse import urlparse, urlunparse, urljoin
+import hashlib
+
 from lxml import html
 import requests
-from time import time
-import hashlib
-import sys
-import math
+import zmq
 
 
 image_extensions = ('.jpg', '.jpeg', '.gif', '.png', '.tiff')
 
-class symbols:
+class events:
     skip     = "."
     download = "+"
     discard  = "-"
@@ -38,6 +40,61 @@ def slugify(s):
     return re.sub('[-\s]+', '-', s)
 
 
+class TargetElement:
+    def __init__(self, pig, element):
+        self.pig = pig
+        self.tag = element.tag
+        if self.tag == 'a':
+            self.raw_url = element.get('href')
+        elif self.tag == 'img':
+            self.raw_url = element.get('src')
+        else:
+            raise
+        if self.raw_url:
+            self.valid = True
+            self.purl = urlparse(self.raw_url)
+            self.text = html.tostring(element)
+            self.filename = os.path.basename(self.purl.path)
+            self.name, self.ext = os.path.splitext(self.filename)
+            self.slug = slugify(self.name) + self.ext
+            self.destination = os.path.join(self.pig.destination, self.slug)
+            self.redirects = []
+            self.is_image = self.purl.path.endswith(image_extensions)
+            if not self.purl.scheme:
+                self.scheme = self.pig.scheme
+            else:
+                self.scheme = self.purl.scheme
+
+            if not self.purl.netloc:
+                self.netloc = self.pig.parsed.netloc
+            else:
+                self.netloc = self.purl.netloc
+
+            self.furl = urlunparse((self.scheme, self.netloc, self.purl.path, self.purl.params, self.purl.query, self.purl.fragment))
+        else:
+            self.valid = False
+
+    def push_redirect(self, url):
+        self.redirects.append(url)
+
+    def last_redirect(self):
+        return self.redirects[-1]
+
+    def redirected_from(self):
+        if len(self.redirects) == 1:
+            return self.furl
+        if len(self.redirects) > 1:
+            return self.redirects[-2]
+        else:
+            return None
+
+    def canonical_url(self):
+        if len(self.redirects) > 0:
+            return self.last_redirect()
+        else:
+            return self.furl
+
+
 class ImageGrabber:
     failed = []
     downloaded = []
@@ -60,9 +117,12 @@ class ImageGrabber:
     sym_width = 40
     sym_block = sym_width * 5
     logfile = None
+    context = None
+    socket = None
 
-    def __init__(self, target_url, imgdir_path=None, imgdir_name=None, unique=False, verbosity=1, logfile_path=None, flush=False):
+    def __init__(self, target_url, imgdir_path=None, imgdir_name=None, unique=False, verbosity=1, logfile_path=None, flush=False, publish=True):
         self.target = target_url
+        self.parsed = urlparse(self.target)
         self.slug = slugify(self.target)
         self.imgdir_path = imgdir_path
         self.imgdir_name = imgdir_name
@@ -70,10 +130,20 @@ class ImageGrabber:
         self.verbosity = verbosity
         self.logfile_path = logfile_path
         self.flush = flush
+        self.publish = publish
+        if self.publish:
+            self.context = zmq.Context()
+            self.socket = self.context.socket(zmq.PUB)
+            self.socket.bind("tcp://127.0.0.1:5555")
         if not self.imgdir_path:
             self.imgdir_path = os.path.join(os.getcwd(), 'pig-downloads')
         if not self.imgdir_name:
             self.imgdir_name = self.slug
+
+        if self.parsed.scheme:
+            self.scheme = self.parsed.scheme
+        else:
+            self.scheme = 'http'
 
         self.destination = os.path.join(self.imgdir_path, self.imgdir_name)
         mkdirp(self.destination)
@@ -117,7 +187,7 @@ class ImageGrabber:
     def sub(self, s, *args):
         self.msg(u"  > "+s, *args)
 
-    def sym(self, c):
+    def event(self, c, element, *other):
         if self.verbosity == 1:
             if self.sym_count_block >= self.sym_block:
                 self.sym_blocks += 1
@@ -131,6 +201,8 @@ class ImageGrabber:
                 self.put()
                 self.sym_count_line = 0
             self.p(c)
+            if self.publish:
+                self.socket.send_string("{} {} {} {}".format(c, element.text, element.furl, " ".join(other)))
             self.sym_count_line += 1
             self.sym_count_block += 1
 
@@ -139,90 +211,69 @@ class ImageGrabber:
             pad = " " * (self.sym_width - self.sym_count_line)
             self.put("{} {} | {}", pad, self.downloads, self.timestamp())
 
-    def download_addresses(self, addresses, retry=False):
-        for url in addresses:
-            self.msg("Processing `{}` . . .", url)
-            url = urlparse(url)
-            if not url.path.endswith(image_extensions):
+    def download_addresses(self, elements, retry=False):
+        for e in elements:
+            self.msg("Processing `{}` . . .", e.text)
+            if not e.is_image:
                 self.sub("No image extension, skipping.")
-                self.sym(symbols.skip)
+                self.event(events.skip, e)
                 continue
-            filename = os.path.basename(url.path)
-            if not url.scheme:
-                rootscheme = urlparse(self.target).scheme
-                if rootscheme:
-                    scheme = rootscheme
-                else:
-                    scheme = 'http'
-            else:
-                scheme = False
-            if not url.netloc:
-                url = urljoin(self.target, url.path)
-            else:
-                if scheme:
-                    url = "{}:{}".format(scheme, urlunparse(url))
-                else:
-                    url = urlunparse(url)
-            if not url in self.downloaded:
-                self.download_address(url, filename)
+            if not e in self.downloaded:
+                self.download_address(e)
             else:
                 self.sub("Already downloaded, skipping.")
-                self.sym(symbols.skip)
+                self.event(events.skip, e, e.destination)
             self.processed += 1
             if retry:
                 self.retries += 1
 
-    def resolve(self, url):
-        r = requests.head(url)
-        redirects = 0
-        while 'Location' in r.headers and redirects < self.redirect_limit:
+    def resolve(self, element):
+        r = requests.head(element.furl)
+        while 'Location' in r.headers and len(element.redirects) <= self.redirect_limit:
+            element.push_redirect(r.headers['Location'])
             r = requests.head(r.headers['Location'])
             self.redirects += 1
-            redirects += 1
-            self.sym(symbols.redirect)
-        if 'Location' in r.headers or not 'Content-Type' in r.headers:
+            self.event(events.redirect, element, element.redirected_from(), element.last_redirect())
+        if 'Location' in r.headers or not 'Content-Type' in r.headers or not r.headers['Content-Type'].startswith('image'):
             return False
         else:
             return r
 
-    def download_address(self, url, filename):
-        name, ext = os.path.splitext(filename)
-        filename = slugify(name) + ext
-        filename = os.path.join(self.destination, filename)
-        r = self.resolve(url)
-        if r and r.headers['Content-Type'].startswith('image'):
-            img = requests.get(url, stream=True)
+    def download_address(self, element):
+        if self.resolve(element):
+            img = requests.get(element.canonical_url(), stream=True)
             if img.status_code == 200:
-                self.sub("Downloading `{}` to `{}`", url, filename)
+                self.sub("Downloading `{}` to `{}`", element.canonical_url(), element.filename)
                 if self.unique:
                     md5 = hashlib.md5()
-                with open(filename, 'wb') as fd:
+                with open(element.destination, 'wb') as fd:
                     img.raw.decode_content = True
                     for chunk in img.iter_content(self.chunk_size):
                         fd.write(chunk)
                         self.download_size += self.chunk_size
                         if self.unique:
                             md5.update(chunk)
-                self.downloaded.append(url)
+                self.downloaded.append(element)
                 self.downloads += 1
                 if self.unique:
                     h = md5.digest()
                     if h in self.hashes:
-                        os.remove(filename)
+                        os.remove(element.filename)
                         self.discarded += 1
-                        self.sym(symbols.discard)
+                        self.sub("Discarding image as duplicate")
+                        self.event(events.discard, element)
                     else:
                         self.hashes.append(h)
-                        self.sym(symbols.download)
+                        self.event(events.download, element, element.destination)
                 else:
-                    self.sym(symbols.download)
+                    self.event(events.download, element, element.destination)
             else:
-                self.sub("Failed getting `{}` with code {}", url, img.status_code)
-                self.sym(symbols.fail)
+                self.sub("Failed getting `{}` with code {}", element.canonical_url(), img.status_code)
+                self.event(events.fail, element)
                 self.failed.append(url)
         else:
             self.sub("Not an image, skipping.")
-            self.sym(symbols.skip)
+            self.event(events.skip, element)
 
     def execute(self):
         self.start = time()
@@ -230,8 +281,10 @@ class ImageGrabber:
             self.logfile = open(self.logfile_path, 'w')
         page = requests.get(self.target)
         tree = html.fromstring(page.content)
-        addresses = tree.xpath('//a/@href') + tree.xpath('//img/@src')
-        self.download_addresses(addresses)
+        elements = tree.xpath('//a') + tree.xpath('//img')
+        elements = [TargetElement(self, e) for e in elements]
+        elements = [e for e in elements if e.valid]
+        self.download_addresses(elements)
         while len(self.failed) > 0 and self.retry_count <= self.retry_limit:
             self.retry_count += 1
             self.msg("Some image downloads failed; retrying, attempt no. ", self.retry_count)

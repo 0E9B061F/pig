@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
 import sys
-from argparse import ArgumentParser
+import argparse
 from os import getcwd, path
 sys.path.append(path.join(path.dirname(__file__), "..", "lib"))
 import pig
 
-parser = ArgumentParser(description="Python Image Grabber (PIG) is a simple single-page image scraper.")
+parser = argparse.ArgumentParser(description="Python Image Grabber (PIG) is a simple single-page image scraper.")
 parser.add_argument("URL", help="The URL to grab images from")
 parser.add_argument("-p", "--path", help="The directory where we'll create new image directories")
 parser.add_argument("-n", "--name", help="A name to use for the image directory")
@@ -15,12 +15,13 @@ parser.add_argument("-s", "--stats", help="Report statistics before PIG exits", 
 parser.add_argument("-v", "--verbose", help="Increase verbosity", action="count")
 parser.add_argument("-q", "--quiet", help="Decrease verbosity", action="count")
 parser.add_argument("-l", "--log", help="Log output to the given file")
+parser.add_argument("-z", "--publish", help=argparse.SUPPRESS, action="store_true")
 args = parser.parse_args()
 
 vp = args.verbose or 0
 vm = args.quiet or 0
 v = 1 + vp - vm
-p = pig.new(args.URL, args.path, args.name, args.unique, v, logfile_path=args.log)
+p = pig.new(args.URL, args.path, args.name, args.unique, v, logfile_path=args.log, publish=args.publish)
 p.execute()
 if args.stats:
     p.print_stats()
