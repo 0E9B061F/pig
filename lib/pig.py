@@ -282,7 +282,7 @@ class PIG:
 
     def download_addresses(self, elements, retry=False):
         for e in elements:
-            self.msg("Processing `{}` . . .", e.text)
+            self.msg("Processing `{}`", e.furl)
             if not e.is_image:
                 self.skip_event(e, msg="No image extension, skipping.", sub=1)
                 continue
@@ -313,7 +313,7 @@ class PIG:
         if self.resolve(element):
             img = requests.get(element.canonical_url(), stream=True)
             if img.status_code == 200:
-                self.sub("Downloading `{}` to `{}`", element.canonical_url(), element.filename)
+                self.sub("Downloading `{}`", element.filename)
                 if self.unique:
                     md5 = hashlib.md5()
                 with open(element.destination, 'wb') as fd:
