@@ -5,24 +5,33 @@ import re
 from time import time
 from urlparse import urlparse, urlunparse, urljoin
 import hashlib
+try: import simplejson as json
+except ImportError: import json
 
 from lxml import html
 import requests
-import zmq
 
 
 image_extensions = ('.jpg', '.jpeg', '.gif', '.png', '.tiff')
 
 class events:
-    skip     = "."
-    download = "+"
-    discard  = "-"
-    redirect = ">"
-    fail     = "?"
+    skip     = "SKIP"
+    download = "DOWNLOAD"
+    discard  = "DISCARD"
+    redirect = "REDIRECT"
+    fail     = "FAIL"
+
+symbols = {
+    events.skip: '.',
+    events.download: '+',
+    events.discard: '-',
+    events.redirect: '>',
+    events.fail: '?'
+}
 
 
 def new(*args, **kwargs):
-    return ImageGrabber(*args, **kwargs)
+    return PIG(*args, **kwargs)
 
 def mkdirp(path):
     try:
@@ -41,6 +50,9 @@ def slugify(s):
 
 
 class TargetElement:
+    duplicate_of = None
+    errorcode = None
+
     def __init__(self, pig, element):
         self.pig = pig
         self.tag = element.tag
@@ -94,14 +106,25 @@ class TargetElement:
         else:
             return self.furl
 
+    def mark_duplicate(self, other):
+        self.duplicate_of = other
 
-class ImageGrabber:
+    def set_errorcode(self, code):
+        self.errorcode = code
+
+
+
+class State:
+    pass
+
+
+class PIG:
     failed = []
     downloaded = []
     retry_limit = 3
     retry_count = 0
     redirect_limit = 2
-    hashes = []
+    hashes = {}
     processed = 0
     discarded = 0
     redirects = 0
@@ -132,6 +155,7 @@ class ImageGrabber:
         self.flush = flush
         self.publish = publish
         if self.publish:
+            import zmq
             self.context = zmq.Context()
             self.socket = self.context.socket(zmq.PUB)
             self.socket.bind("tcp://127.0.0.1:5555")
@@ -180,14 +204,21 @@ class ImageGrabber:
     def p(self, s, *args):
         self.write(s, True, *args)
 
-    def msg(self, s, *args):
+    def msg(self, s, *args, **kwargs):
         if self.verbosity > 1:
+            if 'sub' in kwargs and kwargs['sub'] > 0:
+                s = "{}> {}".format("  " * kwargs['sub'], s)
+            else:
+                s = "[{}] {}".format(self.processed, s)
             self.put(s, *args)
 
     def sub(self, s, *args):
-        self.msg(u"  > "+s, *args)
+        self.msg(s, *args, sub=1)
 
-    def event(self, c, element, *other):
+    def event(self, event, element, msg=None, margs=[], sub=0, **fields):
+        symbol = symbols[event]
+        if msg and (self.verbosity > 1 or self.publish):
+            msg = msg.format(*margs)
         if self.verbosity == 1:
             if self.sym_count_block >= self.sym_block:
                 self.sym_blocks += 1
@@ -200,11 +231,44 @@ class ImageGrabber:
             elif self.sym_count_line >= self.sym_width:
                 self.put()
                 self.sym_count_line = 0
-            self.p(c)
-            if self.publish:
-                self.socket.send_string("{} {} {} {}".format(c, element.text, element.furl, " ".join(other)))
+            self.p(symbol)
             self.sym_count_line += 1
             self.sym_count_block += 1
+        elif msg and self.verbosity > 1:
+            if sub > 0:
+                msg = "{}> {}".format("  " * sub, msg)
+            else:
+                msg = "[{}] {}".format(self.processed, msg)
+            self.put(msg, *margs)
+        if self.publish:
+            fields['event'] = event
+            fields['symbol'] = symbols[event]
+            fields['element'] = element.text
+            fields['url'] = element.furl
+            fields['message'] = msg
+            serialized = json.dumps(fields)
+            self.socket.send_string(serialized)
+
+    def skip_event(self, element, **args):
+        self.event(events.skip, element, **args)
+
+    def download_event(self, element, **args):
+        self.event(events.download, element, file=element.destination, **args)
+
+    def discard_event(self, element, **args):
+        self.event(events.discard, element,
+                   dupe_element=element.duplicate_of.text,
+                   dupe_url=element.duplicate_of.furl,
+                   dupe_file=element.duplicate_of.destination, **args)
+
+    def redirect_event(self, element, **args):
+        self.event(events.redirect, element,
+                   from_url=element.redirected_from(),
+                   to_url=element.last_redirect(),
+                   count=len(element.redirects), **args)
+
+    def fail_event(self, element, **args):
+        self.event(events.skip, element, code=element.errorcode, **args)
 
     def finalize_sym(self):
         if self.sym_count_block > 0:
@@ -215,17 +279,17 @@ class ImageGrabber:
         for e in elements:
             self.msg("Processing `{}` . . .", e.text)
             if not e.is_image:
-                self.sub("No image extension, skipping.")
-                self.event(events.skip, e)
+                self.skip_event(e, msg="No image extension, skipping.", sub=1)
                 continue
             if not e in self.downloaded:
                 self.download_address(e)
             else:
-                self.sub("Already downloaded, skipping.")
-                self.event(events.skip, e, e.destination)
+                self.skip_event(e, msg="Already downloaded, skipping.", sub=1)
             self.processed += 1
             if retry:
                 self.retries += 1
+            # XXX pulse out internal state information for client to update from, once per element (statistics, etc.)
+            # STATE PROCESSED=27 DOWNLOADS=10 REDIRECTs=5
 
     def resolve(self, element):
         r = requests.head(element.furl)
@@ -233,7 +297,8 @@ class ImageGrabber:
             element.push_redirect(r.headers['Location'])
             r = requests.head(r.headers['Location'])
             self.redirects += 1
-            self.event(events.redirect, element, element.redirected_from(), element.last_redirect())
+            self.redirect_event(element, msg="Redirected to {}",
+                                margs=[element.last_redirect()], sub=1)
         if 'Location' in r.headers or not 'Content-Type' in r.headers or not r.headers['Content-Type'].startswith('image'):
             return False
         else:
@@ -260,20 +325,22 @@ class ImageGrabber:
                     if h in self.hashes:
                         os.remove(element.filename)
                         self.discarded += 1
-                        self.sub("Discarding image as duplicate")
-                        self.event(events.discard, element)
+                        element.mark_duplicate(self.hashes[h])
+                        self.discard_event(element, msg="Discarding image as duplicate", sub=1)
                     else:
-                        self.hashes.append(h)
-                        self.event(events.download, element, element.destination)
+                        self.hashes[h] = element
+                        self.download_event(element, msg="Downloaded {}", margs=[element.destination], sub=1)
                 else:
-                    self.event(events.download, element, element.destination)
+                    self.download_event(element, msg="Downloaded {}", margs=[element.destination], sub=1)
             else:
-                self.sub("Failed getting `{}` with code {}", element.canonical_url(), img.status_code)
-                self.event(events.fail, element)
+                element.set_errorcode(img.status_code)
+                self.fail_event(element,
+                                msg="Failed getting `{}` with code {}",
+                                margs=[element.canonical_url(), img.status_code],
+                                sub=1)
                 self.failed.append(url)
         else:
-            self.sub("Not an image, skipping.")
-            self.event(events.skip, element)
+            self.skip_event(element, msg="Not an image, skipping.", sub=1)
 
     def execute(self):
         self.start = time()
