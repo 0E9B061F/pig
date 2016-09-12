@@ -49,6 +49,7 @@ def slugify(s):
     return re.sub('[-\s]+', '-', s)
 
 
+
 class TargetElement:
     duplicate_of = None
     errorcode = None
@@ -113,7 +114,6 @@ class TargetElement:
         self.errorcode = code
 
 
-
 class State:
     pass
 
@@ -142,8 +142,11 @@ class PIG:
     logfile = None
     context = None
     socket = None
+    port = 25252
 
-    def __init__(self, target_url, imgdir_path=None, imgdir_name=None, unique=False, verbosity=1, logfile_path=None, flush=False, publish=True):
+    def __init__(self, target_url,
+                 imgdir_path=None, imgdir_name=None, unique=False, verbosity=1,
+                 logfile_path=None, flush=False, publish=False, port=None):
         self.target = target_url
         self.parsed = urlparse(self.target)
         self.slug = slugify(self.target)
@@ -158,7 +161,9 @@ class PIG:
             import zmq
             self.context = zmq.Context()
             self.socket = self.context.socket(zmq.PUB)
-            self.socket.bind("tcp://127.0.0.1:5555")
+            if port: self.port = port
+            address = "tcp://127.0.0.1:{}".format(self.port)
+            self.socket.bind(address)
         if not self.imgdir_path:
             self.imgdir_path = os.path.join(os.getcwd(), 'pig-downloads')
         if not self.imgdir_name:
