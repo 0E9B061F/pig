@@ -14,12 +14,13 @@ import requests
 
 image_extensions = ('.jpg', '.jpeg', '.gif', '.png', '.tiff')
 
+
 class events:
-    skip     = "SKIP"
+    skip = "SKIP"
     download = "DOWNLOAD"
-    discard  = "DISCARD"
+    discard = "DISCARD"
     redirect = "REDIRECT"
-    fail     = "FAIL"
+    fail = "FAIL"
 
 symbols = {
     events.skip: '.',
@@ -33,12 +34,14 @@ symbols = {
 def new(*args, **kwargs):
     return PIG(*args, **kwargs)
 
+
 def mkdirp(path):
     try:
         os.makedirs(path)
     except OSError:
         if not os.path.isdir(path):
             raise
+
 
 def slugify(s):
     s = re.sub('^.*://', '', s)
@@ -47,7 +50,6 @@ def slugify(s):
     s = re.sub('[^\w]+$', '', s)
     s = re.sub('[^\w\s-]', '', s).strip().lower()
     return re.sub('[-\s]+', '-', s)
-
 
 
 class TargetElement:
@@ -184,12 +186,12 @@ class PIG:
         elif t < 3600:
             m = int(math.floor(t / 60))
             s = int(math.floor(t % 60))
-            t = "{}m{}s".format(m,s)
+            t = "{}m{}s".format(m, s)
         else:
             h = int(math.floor(t / 3600))
             m = int(math.floor((t / 60) % 60))
             s = int(math.floor(t % 60))
-            t = "{}h{}m{}s".format(h,m,s)
+            t = "{}h{}m{}s".format(h, m, s)
         return t
 
     def write(self, str="", raw=False, *args):
@@ -286,14 +288,15 @@ class PIG:
             if not e.is_image:
                 self.skip_event(e, msg="No image extension, skipping.", sub=1)
                 continue
-            if not e in self.downloaded:
+            if e not in self.downloaded:
                 self.download_address(e)
             else:
                 self.skip_event(e, msg="Already downloaded, skipping.", sub=1)
             self.processed += 1
             if retry:
                 self.retries += 1
-            # XXX pulse out internal state information for client to update from, once per element (statistics, etc.)
+            # XXX pulse out internal state information for client to update
+            # from, once per element (statistics, etc.)
             # STATE PROCESSED=27 DOWNLOADS=10 REDIRECTs=5
 
     def resolve(self, element):
@@ -304,7 +307,7 @@ class PIG:
             self.redirects += 1
             self.redirect_event(element, msg="Redirected to {}",
                                 margs=[element.last_redirect()], sub=1)
-        if 'Location' in r.headers or not 'Content-Type' in r.headers or not r.headers['Content-Type'].startswith('image'):
+        if 'Location' in r.headers or 'Content-Type' not in r.headers or not r.headers['Content-Type'].startswith('image'):
             return False
         else:
             return r
