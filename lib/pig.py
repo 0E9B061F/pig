@@ -73,6 +73,7 @@ class TargetElement:
             self.name, self.ext = os.path.splitext(self.filename)
             self.slug = slugify(self.name) + self.ext
             self.destination = os.path.join(self.pig.destination, self.slug)
+            self.abs_destination = os.path.abspath(self.destination)
             self.redirects = []
             self.is_image = self.purl.path.endswith(image_extensions)
             if not self.purl.scheme:
@@ -260,7 +261,7 @@ class PIG:
         self.event(events.skip, element, **args)
 
     def download_event(self, element, **args):
-        self.event(events.download, element, file=element.destination, **args)
+        self.event(events.download, element, file=element.abs_destination, **args)
 
     def discard_event(self, element, **args):
         self.event(events.discard, element,
