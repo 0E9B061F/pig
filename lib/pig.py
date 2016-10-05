@@ -249,12 +249,14 @@ class PIG:
                 msg = "[{}] {}".format(self.processed, msg)
             self.put(msg, *margs)
         if self.publish:
-            fields['event'] = event
-            fields['symbol'] = symbols[event]
-            fields['element'] = element.text
-            fields['url'] = element.furl
-            fields['message'] = msg
-            serialized = json.dumps(fields)
+            out = {'event': event,
+                   'symbol': symbols[event],
+                   'element': element.text,
+                   'url': element.furl,
+                   'message': msg,
+                   'fields': fields
+                   }
+            serialized = json.dumps(out)
             self.socket.send_string(serialized)
 
     def skip_event(self, element, **args):
